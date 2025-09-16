@@ -1,0 +1,5 @@
+I want to be able to enter the number of players in the draft and my draft position, and it
+will allow me to enter the pick of every other person in the draft, and come my turn it will
+recommend a pick. Will be CLI, no need waste dev time.
+
+The heart of the program is the recommendation strategy. I'll figure that out when I get there.
