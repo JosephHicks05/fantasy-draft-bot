@@ -1,4 +1,14 @@
+import csv
 from pathlib import Path
+
+PROJECTIONS_DIRECTORY_NAME: str = "projections"
+PROJECTION_FILE_TEMPLATE: str = "FantasyPros_Fantasy_Football_Projections_{}.csv"
+
+# maps the position each projection file covers to the position code used throughout the draft
+POSITION_BY_PROJECTION_FILE: dict[str, str] = {"QB": "QB", "RB": "RB", "WR": "WR",
+                                                "TE": "TE", "K": "SK", "DST": "AR"}
+
+GAMES_PER_SEASON: int = 17
 
 class Player:
     def __init__(self, name: str, position: str, expected_gamely_score: float):
@@ -10,22 +20,45 @@ class Player:
         return f"{self.position} {self.name} with expected score {self.expected_gamely_score:.4}"
     
 
-def get_player_raw_data() -> list[str]:
+def read_projection_file(projection_file_position: str) -> list[Player]:
+    position: str = POSITION_BY_PROJECTION_FILE[projection_file_position]
+
     base_directory: Path = Path(__file__).parent
-    raw_data_path: Path = base_directory / "player_data_raw.txt"
+    projection_path: Path = base_directory / PROJECTIONS_DIRECTORY_NAME /\
+            PROJECTION_FILE_TEMPLATE.format(projection_file_position)
 
-    return open(raw_data_path, encoding="utf-8").read().lower().split("\n")
+    players: list[Player] = []
+
+    with open(projection_path, newline="", encoding="utf-8-sig") as projection_file:
+        projection_rows = csv.reader(projection_file)
+        header: list[str] = next(projection_rows)
+        total_points_index: int = header.index("FPTS")
+
+        for projection_row in projection_rows:
+            # the exports carry a spacer row under the header and blank rows at the end
+            if len(projection_row) <= total_points_index or not projection_row[0].strip():
+                continue
+
+            player_name: str = projection_row[0].strip()
+            total_expected_points: float = float(projection_row[total_points_index])
+
+            players.append(Player(player_name, position, total_expected_points / GAMES_PER_SEASON))
+
+    return players
 
 
-def construct_player(player_info_lines: list[str], root_player_index: int) -> Player:
-    player_name = player_info_lines[root_player_index + 4].title()
-    player_position = player_info_lines[root_player_index + 5][-2:].upper()
+def read_all_projections() -> list[Player]:
+    # a player listed in two files (a receiving back, say) is kept only at their better position
+    players_by_name: dict[str, Player] = {}
 
-    expected_points_index = player_info_lines.index("2025 outlook:", root_player_index) - 1
-    total_expected_points = float(player_info_lines[expected_points_index])
-    expected_gamely_score = total_expected_points / 17
+    for projection_file_position in POSITION_BY_PROJECTION_FILE:
+        for player in read_projection_file(projection_file_position):
+            best_so_far: Player | None = players_by_name.get(player.name)
 
-    return Player(player_name, player_position, expected_gamely_score)
+            if best_so_far is None or player.expected_gamely_score > best_so_far.expected_gamely_score:
+                players_by_name[player.name] = player
+
+    return list(players_by_name.values())
 
 
 def read_player_csv() -> list[Player]:
@@ -48,18 +81,8 @@ def get_player_list() -> list[Player]:
 
     if CSV_CURRENT:
         return read_player_csv()
-    
-    players: list[Player] = []
 
-    player_info_lines: list[str] = get_player_raw_data()
-
-    last_player_index = 0
-    while "rank" in player_info_lines[last_player_index:]:
-        root_player_index = player_info_lines.index("rank", last_player_index)
-        players.append(construct_player(player_info_lines, root_player_index))
-
-        last_player_index = root_player_index + 1
-
+    players: list[Player] = read_all_projections()
     players.sort(key=lambda x: -x.expected_gamely_score)
 
     construct_player_csv(players)
@@ -74,4 +97,3 @@ def construct_player_csv(players: list[Player]) -> None:
         writer.write("name,position,expected gamely score\n")
         for player in players:
             writer.write(f"{player.name},{player.position},{player.expected_gamely_score:.4}\n")
-
