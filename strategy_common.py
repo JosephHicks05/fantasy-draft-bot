@@ -9,6 +9,7 @@ player_expected_score: Callable[[Player], float] = lambda player: -player.expect
 
 POSITION_NUM_MAPPING: dict[str, int] = {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 1, "AR": 1, "SK": 1, "BENCH": 7}
 FLEX_POSITIONS: tuple[str, str, str] = ("WR", "RB", "TE")
+MAIN_POSITIONS: tuple[str, str, str, str] = ("QB", "RB", "WR", "TE")
 
 class DraftStrategy:
     def __init__(self, name: str, strategy: Callable[["Draft"], Player]):

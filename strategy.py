@@ -127,11 +127,12 @@ def pick_most_volatile_position(draft: "Draft") -> Player:
     return best_player_by_position[most_volatile_position]
 
 
-def pick_volatile_position_predictive(draft: "Draft") -> Player:
+def get_expected_loss_by_position(draft: "Draft") -> tuple[dict[str, float], dict[str, float]]:
+    """returns the volatility of every base position, and of only the positions this drafter may still fill."""
     PRINT_DEBUG_INFO: bool = False
     drafter: DraftedTeam = draft.current_drafter()
     base_positions: list[str] = get_base_positions()
-    
+
     num_positions_picked_distribution: dict[str, dict[int, float]] = {}
     for position in base_positions:
         num_positions_picked_distribution[position] = {0: 1}
@@ -153,7 +154,7 @@ def pick_volatile_position_predictive(draft: "Draft") -> Player:
     if PRINT_DEBUG_INFO:
         print([(position, [(num, round(proportion, 4))for num, proportion in distribution.items()])
                for position, distribution in num_positions_picked_distribution.items()])
-        
+
     expected_loss_by_position: dict[str, float] = {}
     for position in base_positions:
         expected_loss_by_position[position] = 0
@@ -166,7 +167,7 @@ def pick_volatile_position_predictive(draft: "Draft") -> Player:
 
             expected_loss_by_position[position] += (best_player_position_skill - that_player_skill) * likelihood
 
-    
+
     non_full_positions: set[str] = drafter.get_non_full_positions()
 
     #TODO make work with flex better
@@ -185,16 +186,22 @@ def pick_volatile_position_predictive(draft: "Draft") -> Player:
 
     print([(position, round(loss, 4)) for position, loss in expected_loss_by_position.items()])
 
-    for position in base_positions:
-        if position not in non_full_positions and not drafting_backups(drafter):
-            del expected_loss_by_position[position]
+    draftable_loss_by_position: dict[str, float] = {position: loss
+            for position, loss in expected_loss_by_position.items()
+            if position in non_full_positions or drafting_backups(drafter)}
 
-    if expected_loss_by_position == {}:
+    return expected_loss_by_position, draftable_loss_by_position
+
+
+def pick_volatile_position_predictive(draft: "Draft") -> Player:
+    _, draftable_loss_by_position = get_expected_loss_by_position(draft)
+
+    if draftable_loss_by_position == {}:
         return pick_best_player(draft)
 
-    most_volatile_position: str = sorted(expected_loss_by_position.items(), key=lambda x: -x[1])[0][0]
+    most_volatile_position: str = sorted(draftable_loss_by_position.items(), key=lambda x: -x[1])[0][0]
     return draft.available_at_position(most_volatile_position)[0]
-    
+
 
 def testing_strategy_1(draft: "Draft") -> Player:
     PRINT_DEBUG_INFO: bool = True
@@ -268,8 +275,28 @@ def testing_strategy_1(draft: "Draft") -> Player:
 
 
 def manual_predictive(draft: "Draft") -> Player:
-    suggested_player: Player = pick_volatile_position_predictive(draft)
+    expected_loss_by_position, draftable_loss_by_position = get_expected_loss_by_position(draft)
+
+    if draftable_loss_by_position == {}:
+        suggested_player: Player = pick_best_player(draft)
+    else:
+        most_volatile_position: str = sorted(draftable_loss_by_position.items(), key=lambda x: -x[1])[0][0]
+        suggested_player: Player = draft.available_at_position(most_volatile_position)[0]
+
     print(f"you should pick {suggested_player.position} {suggested_player.name}")
+
+    other_choices: list[str] = []
+    for position, _ in sorted(expected_loss_by_position.items(), key=lambda x: -x[1]):
+        if position not in MAIN_POSITIONS or position == suggested_player.position:
+            continue
+
+        best_available: list[Player] = draft.available_at_position(position)
+        if best_available != []:
+            other_choices.append(f"{position} {best_available[0].name}")
+
+    if other_choices != []:
+        print(f"Other choices are {', '.join(other_choices)}")
+
     return allow_player_pick(draft)
 
 
