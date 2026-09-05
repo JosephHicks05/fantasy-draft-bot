@@ -3,6 +3,8 @@ from strategy_utils import *
 from scipy.stats import binom
 from functools import lru_cache
 
+MAX_PICK_ATTEMPTS: int = 10
+
 
 def pick_best_player(draft: "Draft") -> Player:
     return draft.available_players[0]
@@ -10,18 +12,25 @@ def pick_best_player(draft: "Draft") -> Player:
 
 def allow_player_pick(draft: "Draft") -> Player:
     drafter: DraftedTeam = draft.current_drafter()
+    prompt: str = (f"enter {drafter.drafter_name} pick {draft.current_round_number+1}"
+            " <position> <initials>: ")
 
-    while True:
-        selection: Player | None = get_player_from_input(draft.available_players, input(
-                f"enter {drafter.drafter_name} pick {draft.current_round_number+1}"
-                " <position> <initials>: "))
-        
-        if selection is None:
-            print("could not find a player of that position with those initials. Try again.")
-        else:
-            break
+    for attempts_left in range(MAX_PICK_ATTEMPTS - 1, -1, -1):
+        try:
+            given_input: str = input(prompt)
+        except EOFError:
+            raise EOFError(f"input ended while waiting for {drafter.drafter_name}'s"
+                    f" round {draft.current_round_number+1} pick") from None
 
-    return selection
+        selection: Player | None = get_player_from_input(draft.available_players, given_input)
+        if selection is not None:
+            return selection
+
+        print("could not find a player of that position with those initials."
+                f" Try again ({attempts_left} attempts left).")
+
+    raise ValueError(f"no valid player entered for {drafter.drafter_name} after"
+            f" {MAX_PICK_ATTEMPTS} attempts")
 
 
 def pick_best_player_vacant_position(draft: "Draft") -> Player:
