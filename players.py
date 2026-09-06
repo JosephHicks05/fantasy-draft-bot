@@ -2,7 +2,7 @@ import csv
 from pathlib import Path
 
 PROJECTIONS_DIRECTORY_NAME: str = "projections"
-PROJECTION_FILE_TEMPLATE: str = "FantasyPros_Fantasy_Football_Projections_{}.csv"
+PROJECTION_FILE_TEMPLATE: str = "projections_{}.csv"
 
 # maps the position each projection file covers to the position code used throughout the draft
 POSITION_BY_PROJECTION_FILE: dict[str, str] = {"QB": "QB", "RB": "RB", "WR": "WR",
