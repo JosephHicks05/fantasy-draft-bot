@@ -11,10 +11,16 @@ POSITION_NUM_MAPPING: dict[str, int] = {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLE
 FLEX_POSITIONS: tuple[str, str, str] = ("WR", "RB", "TE")
 MAIN_POSITIONS: tuple[str, str, str, str] = ("QB", "RB", "WR", "TE")
 
+class UndoRequested(Exception):
+    """raised by an interactive strategy when the user asks to undo instead of entering a pick."""
+
+
 class DraftStrategy:
-    def __init__(self, name: str, strategy: Callable[["Draft"], Player]):
+    def __init__(self, name: str, strategy: Callable[["Draft"], Player], interactive: bool = False):
         self.name: str = name
         self.strategy: Callable[["Draft"], Player] = strategy
+        # only strategies that prompt the user can be asked to undo
+        self.interactive: bool = interactive
 
 
 class DraftedTeam:

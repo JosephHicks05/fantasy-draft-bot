@@ -1,8 +1,19 @@
 from players import Player, get_player_list
-from strategy import DraftedTeam, DraftStrategy, get_strategy, POSITION_NUM_MAPPING, ALL_STRATEGIES, FLEX_POSITIONS
+from strategy import DraftedTeam, DraftStrategy, get_strategy, POSITION_NUM_MAPPING, ALL_STRATEGIES,\
+        FLEX_POSITIONS, UndoRequested
 
 NUM_DRAFT_ROUNDS: int = sum(POSITION_NUM_MAPPING.values())
 AUTO_STRATEGY: DraftStrategy = get_strategy("manual_predictive")
+
+class CompletedPick:
+    """everything needed to put the draft back the way it was before a pick was made."""
+    def __init__(self, drafter_index: int, round_number: int, player: Player, available_index: int):
+        self.drafter_index: int = drafter_index
+        self.round_number: int = round_number
+        self.player: Player = player
+        # where the player sat in available_players, so undoing keeps that list in ranking order
+        self.available_index: int = available_index
+
 
 class Draft:
     def __init__(self, auto_init = False):
@@ -11,6 +22,7 @@ class Draft:
         self.current_drafter_index: int = 0
         self.current_round_number: int = 0
         self.available_players: list[Player] = get_player_list()
+        self.completed_picks: list[CompletedPick] = []
 
         if not auto_init:
             manual_assignment: bool = input("manually assign strategies? (y/n): ").lower() in ("y", "yes")
@@ -25,7 +37,10 @@ class Draft:
 
     def run_draft(self) -> None:
         while not self._draft_completed():
-            self._perform_next_pick()
+            try:
+                self._perform_next_pick()
+            except UndoRequested:
+                self._undo_last_pick()
 
 
     def print_results(self) -> None:
@@ -96,8 +111,11 @@ class Draft:
         drafter: DraftedTeam = self.teams[self.current_drafter_index]
         selected_player: Player = drafter.strategy.strategy(self)
 
-        self.available_players.remove(selected_player)
+        available_index: int = self.available_players.index(selected_player)
+        self.available_players.pop(available_index)
         drafter.players.append(selected_player)
+        self.completed_picks.append(CompletedPick(self.current_drafter_index, self.current_round_number,
+                selected_player, available_index))
 
         self._advance_pick_number()
 
@@ -107,6 +125,34 @@ class Draft:
         select_conjugation: str = "should select" if (drafter.drafter_name == "You"\
                 and not drafter.strategy == get_strategy("manual_predictive")) else "selected"
         print(f"{drafter.drafter_name} {select_conjugation} {selected_player.position} {selected_player.name}.\n")
+
+
+    def _undo_last_pick(self) -> None:
+        if self.completed_picks == []:
+            print("there are no picks to undo.\n")
+            return
+
+        # keep undoing past picks nobody was asked about, so the draft stops somewhere it can be re-entered
+        while True:
+            undone_pick: CompletedPick = self.completed_picks.pop()
+            self._revert_pick(undone_pick)
+
+            if self.completed_picks == [] or self.current_drafter().strategy.interactive:
+                return
+
+
+    def _revert_pick(self, undone_pick: CompletedPick) -> None:
+        drafter: DraftedTeam = self.teams[undone_pick.drafter_index]
+
+        drafter.players.remove(undone_pick.player)
+        self.available_players.insert(undone_pick.available_index, undone_pick.player)
+
+        self.current_drafter_index = undone_pick.drafter_index
+        self.current_round_number = undone_pick.round_number
+
+        if self.print_picks:
+            print(f"undid {drafter.drafter_name}'s pick of {undone_pick.player.position}"
+                    f" {undone_pick.player.name}.\n")
 
 
     def snaking_forward(self) -> bool:

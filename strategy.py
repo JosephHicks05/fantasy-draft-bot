@@ -4,6 +4,7 @@ from scipy.stats import binom
 from functools import lru_cache
 
 MAX_PICK_ATTEMPTS: int = 10
+UNDO_COMMAND: str = "undo"
 
 
 def pick_best_player(draft: "Draft") -> Player:
@@ -13,7 +14,7 @@ def pick_best_player(draft: "Draft") -> Player:
 def allow_player_pick(draft: "Draft") -> Player:
     drafter: DraftedTeam = draft.current_drafter()
     prompt: str = (f"enter {drafter.drafter_name} pick {draft.current_round_number+1}"
-            " <position> <initials>: ")
+            f" <position> <initials> (or \"{UNDO_COMMAND}\"): ")
 
     for attempts_left in range(MAX_PICK_ATTEMPTS - 1, -1, -1):
         try:
@@ -21,6 +22,9 @@ def allow_player_pick(draft: "Draft") -> Player:
         except EOFError:
             raise EOFError(f"input ended while waiting for {drafter.drafter_name}'s"
                     f" round {draft.current_round_number+1} pick") from None
+
+        if given_input.strip().lower() == UNDO_COMMAND:
+            raise UndoRequested()
 
         selection: Player | None = get_player_from_input(draft.available_players, given_input)
         if selection is not None:
@@ -310,11 +314,11 @@ def manual_predictive(draft: "Draft") -> Player:
 
 
 ALL_STRATEGIES: list[DraftStrategy] = [DraftStrategy("greedy", pick_best_player),
-                                       DraftStrategy("manual", allow_player_pick),
+                                       DraftStrategy("manual", allow_player_pick, interactive=True),
                                        DraftStrategy("greedy_vacant", pick_best_player_vacant_position),
                                        DraftStrategy("volatile", pick_most_volatile_position),
                                        DraftStrategy("predictive", pick_volatile_position_predictive),
-                                       DraftStrategy("manual_predictive", manual_predictive),
+                                       DraftStrategy("manual_predictive", manual_predictive, interactive=True),
                                        DraftStrategy("test", testing_strategy_1)]
 
 def get_strategy(name: str) -> DraftStrategy:
